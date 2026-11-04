@@ -124,6 +124,13 @@ function Set-PrioridadBaja($procs) {
     }
 }
 
+# Ruta para la linea de comandos: sin comillas (igual que el script original),
+# salvo que tenga espacios
+function Ruta([string]$p) {
+    if ($p -match '\s') { return "`"$p`"" }
+    return $p
+}
+
 # Espera a que la PC termine de cargar la ventana anterior
 function Esperar-Calma {
     Start-Sleep -Seconds $pausaMinSeg
@@ -220,8 +227,8 @@ if (-not $Liviano) {
     $argsBase += "--disable-background-timer-throttling"
 }
 if ($hasExtension) {
-    $argsBase += "--disable-extensions-except=`"$extensionPath`""
-    $argsBase += "--load-extension=`"$extensionPath`""
+    $argsBase += "--disable-extensions-except=$(Ruta $extensionPath)"
+    $argsBase += "--load-extension=$(Ruta $extensionPath)"
 } else {
     $argsBase += "--disable-extensions"
 }
@@ -275,7 +282,10 @@ for ($i = 1; $i -le $Cantidad; $i++) {
     $x = ($i * 37) % $rangoX
     $y = ($i * 29) % $rangoY
 
-    $argsList = @("--user-data-dir=`"$profileDir`"", "--window-position=$x,$y") + $argsBase + $url
+    # --user-data-dir propio = navegador separado = VENTANA nueva con sesion aislada
+    # --new-window = aunque algo falle, nunca la agrega como pestana
+    $argsList = @("--user-data-dir=$(Ruta $profileDir)", "--new-window", "--window-position=$x,$y") + $argsBase + $url
+    $antes = $abiertas
     try {
         Start-Process -FilePath $exePath -ArgumentList $argsList
     } catch {
@@ -289,6 +299,9 @@ for ($i = 1; $i -le $Cantidad; $i++) {
     $procs = Get-ProcesosNuestros
     Set-PrioridadBaja $procs
     $abiertas = Get-CantidadAbiertas $procs
+    if ($abiertas -le $antes) {
+        Write-Host "      !! La sesion $i no aparecio como ventana aislada propia (revisar)" -ForegroundColor Red
+    }
     $memMB = [int](($procs | Measure-Object -Property PrivatePageCount -Sum).Sum / 1MB)
     if ($abiertas -gt 0) { $porSesionMB = [math]::Max(120, [int]($memMB / $abiertas)) }
     $ramLibre = Get-RamLibreMB
